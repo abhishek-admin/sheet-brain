@@ -33,4 +33,4 @@ A Chrome extension that generates custom Google Sheets formulas from plain Engli
 
 ---
 
-Built by [@happy_ships](https://x.com/happy_ships) · Day 3/180
+Built by [@happy_ships](https://x.com/happy_ships) · Day 5/180
