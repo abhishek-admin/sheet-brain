@@ -219,7 +219,7 @@ The formula must be copy-paste ready.`;
   // ---- Event Listeners ----
 
   actionBtn.addEventListener('click', runAction);
-  retryBtn.addEventListener('click', runAction);
+  retryBtn.addEventListener('click', () => showState('idle'));
   rerunBtn.addEventListener('click', runAction);
 
   copyBtn.addEventListener('click', () => {
