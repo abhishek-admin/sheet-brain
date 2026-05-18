@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sheet Brain</title>
   <link rel="stylesheet" href="popup.css">
-  <style>:root { --accent: #34d399; }</style>
+  <style>
+    :root { --accent: #34d399; }
+    .sheet-bar { display:flex; align-items:center; justify-content:space-between; background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.2); border-radius:6px; padding:6px 10px; margin-bottom:8px; gap:8px; }
+    .sheet-bar-name { color:#34d399; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; }
+    .suggest-btn { background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); color:#34d399; border-radius:4px; padding:3px 9px; font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+    .suggest-btn:hover { background:rgba(52,211,153,0.25); }
+    .sheet-hint { font-size:11px; color:#6b7280; margin-bottom:8px; text-align:center; padding:5px 0; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -21,10 +28,17 @@
     </div>
 
     <div id="main-content">
-      <p class="subtitle">AI-powered custom Google Sheets functions</p>
-      <textarea id="custom-input" class="settings-input" rows="3" placeholder="Describe what Sheets functions you need..." style="margin-top:6px;width:100%;resize:vertical;"></textarea>
+      <!-- Shown when a Google Sheet is open -->
+      <div id="sheet-bar" class="sheet-bar hidden">
+        <span id="sheet-bar-name" class="sheet-bar-name">📊 Spreadsheet</span>
+        <button id="suggest-btn" class="suggest-btn">✨ Suggest formulas</button>
+      </div>
+      <!-- Shown when NOT on a Google Sheet -->
+      <p id="sheet-hint" class="sheet-hint hidden">💡 Open a Google Sheet for smart suggestions</p>
+
+      <textarea id="custom-input" class="settings-input" rows="3" placeholder="Describe the formula you need..." style="margin-top:0;width:100%;resize:vertical;"></textarea>
       <button id="action-btn" class="primary-btn">
-        <span class="btn-text">▶ Generate Functions</span>
+        <span class="btn-text">▶ Generate Formula</span>
       </button>
     </div>
 

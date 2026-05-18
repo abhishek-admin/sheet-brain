@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const error = document.getElementById('error');
   const errorMessage = document.getElementById('error-message');
 
+  const sheetBar = document.getElementById('sheet-bar');
+  const sheetBarName = document.getElementById('sheet-bar-name');
+  const sheetHint = document.getElementById('sheet-hint');
+  const suggestBtn = document.getElementById('suggest-btn');
+
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
   const settingsClose = document.getElementById('settings-close');
@@ -108,6 +113,105 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     showState('idle');
   });
+
+  // ============================================
+  // ▼▼▼ SHEET DETECTION — runs on popup open ▼▼▼
+  // ============================================
+
+  // Standalone — must not reference outer scope (serialized for executeScript)
+  function extractSheetData() {
+    const title = document.title.replace(/ - Google Sheets$/, '').trim();
+    const cells = [];
+    const strategies = [
+      '[role="gridcell"]',
+      '.waffle td',
+      '[data-row-index] .cell-value',
+    ];
+    for (const sel of strategies) {
+      const els = document.querySelectorAll(sel);
+      if (els.length > 3) {
+        let n = 0;
+        els.forEach(el => {
+          const t = (el.textContent || el.innerText || '').trim();
+          if (t && n < 60) { cells.push(t); n++; }
+        });
+        break;
+      }
+    }
+    return { title, cells };
+  }
+
+  async function detectSheetContext() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = tab?.url || '';
+      if (url.includes('docs.google.com/spreadsheets')) {
+        const sheetName = (tab.title || '').replace(/ - Google Sheets$/, '').trim() || 'Spreadsheet';
+        sheetBarName.textContent = `📊 ${sheetName}`;
+        sheetBar.classList.remove('hidden');
+
+        // Try to extract visible cell data for the suggest button
+        try {
+          const [{ result }] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: extractSheetData,
+          });
+          window._sheetCtx = result;
+        } catch {
+          window._sheetCtx = { title: sheetName, cells: [] };
+        }
+      } else {
+        sheetHint.classList.remove('hidden');
+      }
+    } catch {
+      // Non-critical — silently skip if tab access fails
+    }
+  }
+
+  detectSheetContext();
+
+  suggestBtn.addEventListener('click', () => {
+    const ctx = window._sheetCtx;
+    if (!ctx) return;
+    showState('loading');
+
+    const dataLine = ctx.cells.length > 3
+      ? `Visible cell data (first ~60 cells): ${ctx.cells.join(', ')}`
+      : `Sheet name: "${ctx.title}" (cell data unavailable — suggest based on name and common patterns)`;
+
+    const suggestPrompt = `Google Sheet: "${ctx.title}"
+${dataLine}
+
+Analyze this spreadsheet and suggest 3–4 genuinely useful formulas for THIS specific data. For each:
+
+## 💡 [Formula purpose — specific to the columns visible]
+\`\`\`
+[exact formula using the actual column letters/names from the data above]
+\`\`\`
+**When to use:** [one line, specific to this sheet]
+**Example:** [using actual values or column names visible in the data]
+
+Be specific to the columns and data types visible — not generic Sheets tutorials.`;
+
+    chrome.runtime.sendMessage(
+      {
+        action: 'callGeminiBackground',
+        prompt: suggestPrompt,
+        options: {
+          systemInstruction: 'You are a Google Sheets expert analyzing a real spreadsheet. Suggest formulas that directly apply to the visible column names and data. Use the actual column letters and header names in your examples.',
+          temperature: 0.3,
+        },
+      },
+      (response) => {
+        if (response?.success) showResult(response.data, false);
+        else showError(response?.error || 'Could not analyze the sheet. Try describing what you need below.');
+      }
+    );
+  });
+
+  // ============================================
+  // ▲▲▲ END SHEET DETECTION ▲▲▲
+  // ============================================
 
   // ============================================
   // ▼▼▼ ACTION LOGIC — MODIFY THIS PER PROJECT ▼▼▼

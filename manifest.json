@@ -3,7 +3,7 @@
   "name": "Sheet Brain",
   "description": "Generate custom Google Sheets functions with AI — describe what you need, get the formula",
   "version": "1.0.0",
-  "permissions": ["activeTab","storage","contextMenus","tabs"],
+  "permissions": ["activeTab","storage","contextMenus","tabs","scripting"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": { "32": "icons/icons32.png" }
