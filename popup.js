@@ -17,11 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const error = document.getElementById('error');
   const errorMessage = document.getElementById('error-message');
 
-  const sheetBar = document.getElementById('sheet-bar');
-  const sheetBarName = document.getElementById('sheet-bar-name');
-  const sheetHint = document.getElementById('sheet-hint');
-  const suggestBtn = document.getElementById('suggest-btn');
-
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
   const settingsClose = document.getElementById('settings-close');
@@ -115,105 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ============================================
-  // ▼▼▼ SHEET DETECTION — runs on popup open ▼▼▼
-  // ============================================
-
-  // Standalone — must not reference outer scope (serialized for executeScript)
-  function extractSheetData() {
-    const title = document.title.replace(/ - Google Sheets$/, '').trim();
-    const cells = [];
-    const strategies = [
-      '[role="gridcell"]',
-      '.waffle td',
-      '[data-row-index] .cell-value',
-    ];
-    for (const sel of strategies) {
-      const els = document.querySelectorAll(sel);
-      if (els.length > 3) {
-        let n = 0;
-        els.forEach(el => {
-          const t = (el.textContent || el.innerText || '').trim();
-          if (t && n < 60) { cells.push(t); n++; }
-        });
-        break;
-      }
-    }
-    return { title, cells };
-  }
-
-  async function detectSheetContext() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const url = tab?.url || '';
-      if (url.includes('docs.google.com/spreadsheets')) {
-        const sheetName = (tab.title || '').replace(/ - Google Sheets$/, '').trim() || 'Spreadsheet';
-        sheetBarName.textContent = `📊 ${sheetName}`;
-        sheetBar.classList.remove('hidden');
-
-        // Try to extract visible cell data for the suggest button
-        try {
-          const [{ result }] = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: extractSheetData,
-          });
-          window._sheetCtx = result;
-        } catch {
-          window._sheetCtx = { title: sheetName, cells: [] };
-        }
-      } else {
-        sheetHint.classList.remove('hidden');
-      }
-    } catch {
-      // Non-critical — silently skip if tab access fails
-    }
-  }
-
-  detectSheetContext();
-
-  suggestBtn.addEventListener('click', () => {
-    const ctx = window._sheetCtx;
-    if (!ctx) return;
-    showState('loading');
-
-    const dataLine = ctx.cells.length > 3
-      ? `Visible cell data (first ~60 cells): ${ctx.cells.join(', ')}`
-      : `Sheet name: "${ctx.title}" (cell data unavailable — suggest based on name and common patterns)`;
-
-    const suggestPrompt = `Google Sheet: "${ctx.title}"
-${dataLine}
-
-Analyze this spreadsheet and suggest 3–4 genuinely useful formulas for THIS specific data. For each:
-
-## 💡 [Formula purpose — specific to the columns visible]
-\`\`\`
-[exact formula using the actual column letters/names from the data above]
-\`\`\`
-**When to use:** [one line, specific to this sheet]
-**Example:** [using actual values or column names visible in the data]
-
-Be specific to the columns and data types visible — not generic Sheets tutorials.`;
-
-    chrome.runtime.sendMessage(
-      {
-        action: 'callGeminiBackground',
-        prompt: suggestPrompt,
-        options: {
-          systemInstruction: 'You are a Google Sheets expert analyzing a real spreadsheet. Suggest formulas that directly apply to the visible column names and data. Use the actual column letters and header names in your examples.',
-          temperature: 0.3,
-        },
-      },
-      (response) => {
-        if (response?.success) showResult(response.data, false);
-        else showError(response?.error || 'Could not analyze the sheet. Try describing what you need below.');
-      }
-    );
-  });
-
-  // ============================================
-  // ▲▲▲ END SHEET DETECTION ▲▲▲
-  // ============================================
-
-  // ============================================
   // ▼▼▼ ACTION LOGIC — MODIFY THIS PER PROJECT ▼▼▼
   // ============================================
 
@@ -221,47 +117,59 @@ Be specific to the columns and data types visible — not generic Sheets tutoria
     showState('loading');
     try {
       const userInput = document.getElementById('custom-input')?.value.trim() || '';
-      if (!userInput) { showError('Describe the Sheets function you need.'); return; }
+      if (!userInput) {
+        showError('Paste your spreadsheet data first — Ctrl+A, Ctrl+C from any sheet.');
+        return;
+      }
+      if (userInput.split('\n').length < 2) {
+        showError('Looks like only one row was pasted. Copy the full sheet including headers.');
+        return;
+      }
 
-      // Phase 1: Instant local preview — no API call
-      const snippet = userInput.length > 70 ? userInput.slice(0, 70) + '...' : userInput;
-      showResult(`## Building formula for:\n\n*"${snippet}"*\n\n*Gemini is generating the exact formula...*`, true);
+      // Phase 1: Local preview — count rows and columns instantly
+      const rows = userInput.trim().split('\n');
+      const colCount = rows[0].split(/\t|,/).length;
+      showResult(`## ⏳ Analysing your sheet...\n\n**${rows.length} rows · ${colCount} columns detected**\n\n*Finding hidden insights...*`, true);
 
-      // Phase 2: Full formula — single API call
-      const fullPrompt = `Google Sheets request: "${userInput}"
+      // Phase 2: Single Gemini call — insights + formula recommendations
+      const fullPrompt = `Spreadsheet data (tab or comma separated, pasted by user):
 
-Generate the formula or solution:
+${userInput.slice(0, 12000)}
 
-## Formula
-\`\`\`
-[The exact formula ready to paste — include all parameters]
-\`\`\`
+Analyse this data and respond ONLY in this format — brief bullet points, no prose paragraphs:
 
-## How It Works
-[Plain English breakdown — what each part does, what to replace with your own data]
+## 🔍 Hidden Insights
+- [specific pattern, anomaly, or fact from the data the user likely didn't notice — cite exact numbers/values]
+- [outlier or extreme value — which row/category and what makes it stand out]
+- [category or group breakdown — e.g. "X accounts for 40% of total Y"]
+- [trend or gap — missing dates, unusual spike, declining pattern]
+- [duplicate, inconsistency, or data quality issue if any]
+- [one more non-obvious insight specific to this data]
 
-## Example
-| Input | Formula | Output |
-|-------|---------|--------|
-| [sample data] | [formula applied] | [result] |
+## 📊 Formula Recommendations
+- **[FORMULA](\`=exact_formula_here\`)** — [one line: what it does with actual column names from this data]
+- **[FORMULA](\`=exact_formula_here\`)** — [one line]
+- **[FORMULA](\`=exact_formula_here\`)** — [one line]
+- **[FORMULA](\`=exact_formula_here\`)** — [one line]
 
-## Tips
-[Gotchas, variations, or alternatives worth knowing]
-
-The formula must be copy-paste ready.`;
+Rules:
+- Every insight must reference specific values, names, or numbers from the data — no generic observations
+- Formulas must use actual column names/letters from the pasted data
+- Keep each bullet to one line
+- Works for Excel, Google Sheets, LibreOffice — use universally supported functions`;
 
       chrome.runtime.sendMessage(
         {
           action: 'callGeminiBackground',
           prompt: fullPrompt,
           options: {
-            systemInstruction: 'You are a Google Sheets expert. Provide accurate, copy-paste-ready formulas with clear explanations. Use code blocks for all formulas.',
-            temperature: 0.3,
+            systemInstruction: 'You are a sharp data analyst. Spot non-obvious patterns in spreadsheet data. Be specific — cite actual values, names, and numbers from the data. Never give generic advice. Every bullet must reference something concrete from the pasted dataset.',
+            temperature: 0.4,
           },
         },
         (response) => {
           if (response?.success) showResult(response.data, false);
-          else showError(response?.error || 'Formula generation failed. Try again.');
+          else showError(response?.error || 'Analysis failed. Try again.');
         }
       );
     } catch (err) {
