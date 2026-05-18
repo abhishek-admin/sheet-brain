@@ -1,32 +1,31 @@
 # Sheet Brain
 
-> Describe what you need. Get the formula.
+> Paste your sheet. Get hidden insights.
 
 **Day 05 / 180 — 180 Days of Building**
 
-Google Sheets formulas are powerful but brutal to learn. You know what you want — you just can't remember if it's VLOOKUP or INDEX MATCH or something else entirely. Describe your goal in plain English and Sheet Brain gives you the exact formula, how it works, a sample dataset showing it in action, and the gotchas to watch out for.
+Most spreadsheet tools help you build formulas. Sheet Brain does something different — you paste your actual data and it finds what you missed: the outlier you didn't notice, the category eating 60% of your budget, the trend hiding in plain sight. Plus formula recommendations built around your real column names.
 
-![Demo](demo.gif)
+Works with Excel, Google Sheets, LibreOffice, or any app that lets you copy cells.
+
+![Demo](sheetbr.gif)
 
 ---
 
 ## What it does
 
-- **Formula** — the exact formula, ready to paste into any cell
-- **How It Works** — plain English breakdown of every part of the formula
-- **Example** — sample data showing the formula working with real values
-- **Tips** — gotchas, common variations, and alternatives to consider
-
-Works for any formula need: lookups, conditionals, text manipulation, date math, array formulas, and more.
+- **Hidden Insights** — 6 specific observations from your data: outliers, category breakdowns, trends, gaps, duplicates, anomalies — each citing actual values from your sheet
+- **Formula Recommendations** — 4 formulas tailored to your column names and data types, copy-paste ready
 
 ---
 
 ## How to use
 
-1. Click the extension icon
-2. Describe the formula you need in plain English (e.g. *"sum rows where status is Paid"* or *"count unique values in column B"*)
-3. Hit **Generate Functions**
-4. Copy the formula directly into your sheet
+1. Open any spreadsheet (Excel, Google Sheets, LibreOffice — anything)
+2. Select all your data (`Ctrl+A`) and copy it (`Ctrl+C`)
+3. Click the extension icon and paste into the text box
+4. Hit **Analyse Sheet**
+5. Get insights and formula recommendations in seconds
 
 ---
 
