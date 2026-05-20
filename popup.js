@@ -32,6 +32,38 @@ document.addEventListener('DOMContentLoaded', () => {
   const onboardOpenrouterInput = document.getElementById('onboard-openrouter-input');
   const onboardSaveBtn = document.getElementById('onboard-save-btn');
 
+  // ---- Domain detection & local stats (pure, no API) ----
+
+  function detectDomain(headers) {
+    const h = headers.join(' ').toLowerCase();
+    if (/revenue|deal|pipeline|quota|forecast|churn|sales|customer|mrr|arr/.test(h)) return { label: '📈 Sales', key: 'sales' };
+    if (/employee|salary|department|headcount|tenure|performance|hire|payroll/.test(h)) return { label: '👥 HR', key: 'hr' };
+    if (/budget|expense|cost|profit|margin|ebitda|invoice|payment|cashflow/.test(h)) return { label: '💰 Finance', key: 'finance' };
+    if (/stock|sku|quantity|warehouse|reorder|inventory|supplier|units/.test(h)) return { label: '📦 Inventory', key: 'inventory' };
+    if (/impression|click|ctr|conversion|cpc|cpa|campaign|ad spend|roas/.test(h)) return { label: '📣 Marketing', key: 'marketing' };
+    return { label: '📊 Data', key: 'generic' };
+  }
+
+  function formatNum(n) {
+    if (Math.abs(n) >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return Number.isInteger(n) ? n.toString() : n.toFixed(2);
+  }
+
+  function computeStats(rows, headers) {
+    const stats = [];
+    headers.forEach((header, colIdx) => {
+      const vals = rows.slice(1)
+        .map(r => parseFloat((r[colIdx] || '').toString().replace(/[^0-9.\-]/g, '')))
+        .filter(v => !isNaN(v) && isFinite(v));
+      if (vals.length >= Math.max(2, rows.length * 0.4)) {
+        const sum = vals.reduce((a, b) => a + b, 0);
+        stats.push({ name: header, min: Math.min(...vals), max: Math.max(...vals), avg: sum / vals.length, sum, count: vals.length });
+      }
+    });
+    return stats.slice(0, 3);
+  }
+
   // ---- Markdown → HTML ----
 
   function renderMarkdown(text) {
