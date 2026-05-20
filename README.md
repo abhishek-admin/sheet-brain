@@ -14,8 +14,12 @@ Works with Excel, Google Sheets, LibreOffice, or any app that lets you copy cell
 
 ## What it does
 
-- **Hidden Insights** — 6 specific observations from your data: outliers, category breakdowns, trends, gaps, duplicates, anomalies — each citing actual values from your sheet
-- **Formula Recommendations** — 4 formulas tailored to your column names and data types, copy-paste ready
+- **Domain Detection** — instantly classifies your data as Sales, HR, Finance, Inventory, Marketing, or generic — no input needed
+- **Instant Stats** — min, max, and average computed locally before any API call, shown as chips while the AI thinks
+- **The Story** — 2-sentence plain-English summary of what your dataset reveals, with specific values named
+- **Top 3 Aha Moments** — the three most surprising findings, each citing exact numbers from your data
+- **Hidden Patterns** — outliers, category breakdowns, trends, gaps, and data quality issues with exact values
+- **Smart Formulas** — formulas using your real column names, ready to paste
 
 ---
 
