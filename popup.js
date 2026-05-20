@@ -174,13 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---- Restore cache on popup open ----
 
   function initApp() {
-    chrome.storage.session.get(['cached_result', 'cached_at'], (data) => {
-      if (data.cached_result && data.cached_at) {
-        if (Date.now() - data.cached_at < 10 * 60 * 1000) {
-          resultContent.innerHTML = renderMarkdown(data.cached_result);
-          showState('result');
-          return;
-        }
+    chrome.storage.session.get(['cached_result', 'cached_at', 'cached_domain', 'cached_stats'], (data) => {
+      if (data.cached_result && data.cached_at && (Date.now() - data.cached_at < 10 * 60 * 1000)) {
+        const domain = data.cached_domain ? JSON.parse(data.cached_domain) : { label: '📊 Data', key: 'generic' };
+        const stats = data.cached_stats ? JSON.parse(data.cached_stats) : [];
+        resultContent.innerHTML = buildInsightHTML(data.cached_result, domain, stats);
+        showState('result');
+        return;
       }
       showState('idle');
     });
@@ -198,6 +198,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // ▼▼▼ ACTION LOGIC — MODIFY THIS PER PROJECT ▼▼▼
   // ============================================
 
+  function buildInsightHTML(text, domainInfo, statChips) {
+    const headerHtml = `<div class="insight-header">
+      <span class="domain-badge">${domainInfo.label} Data</span>
+      ${statChips.map(s => `<span class="stat-chip"><strong>${s.name}</strong> avg ${formatNum(s.avg)} · max ${formatNum(s.max)}</span>`).join('')}
+    </div>`;
+
+    let md = renderMarkdown(text);
+
+    md = md.replace(
+      /(<h3>The Story<\/h3>)([\s\S]*?)(?=<h3>|$)/,
+      '$1<div class="story-callout">$2</div>'
+    );
+    md = md.replace(
+      /(<h3>Top 3 Aha Moments<\/h3>)([\s\S]*?)(?=<h3>|$)/,
+      '$1<div class="aha-list">$2</div>'
+    );
+
+    return headerHtml + md;
+  }
+
   async function runAction() {
     showState('loading');
     try {
@@ -206,55 +226,78 @@ document.addEventListener('DOMContentLoaded', () => {
         showError('Paste your spreadsheet data first — Ctrl+A, Ctrl+C from any sheet.');
         return;
       }
-      if (userInput.split('\n').length < 2) {
+      const rawRows = userInput.trim().split('\n');
+      if (rawRows.length < 2) {
         showError('Looks like only one row was pasted. Copy the full sheet including headers.');
         return;
       }
 
-      // Phase 1: Local preview — count rows and columns instantly
-      const rows = userInput.trim().split('\n');
-      const colCount = rows[0].split(/\t|,/).length;
-      showResult(`## ⏳ Analysing your sheet...\n\n**${rows.length} rows · ${colCount} columns detected**\n\n*Finding hidden insights...*`, true);
+      // Phase 1: instant local analysis — domain + stats, no API needed
+      const separator = rawRows[0].includes('\t') ? '\t' : ',';
+      const parsedRows = rawRows.map(r => r.split(separator));
+      const headers = parsedRows[0];
+      const domainInfo = detectDomain(headers);
+      const statChips = computeStats(parsedRows, headers);
 
-      // Phase 2: Single Gemini call — insights + formula recommendations
-      const fullPrompt = `Spreadsheet data (tab or comma separated, pasted by user):
+      const statsContext = statChips.length
+        ? statChips.map(s => `${s.name}: min ${formatNum(s.min)}, max ${formatNum(s.max)}, avg ${formatNum(s.avg)}, total ${formatNum(s.sum)}`).join('\n')
+        : 'No numeric columns detected.';
 
-${userInput.slice(0, 12000)}
+      resultContent.innerHTML = `<div class="insight-header">
+        <span class="domain-badge">${domainInfo.label} Data</span>
+        ${statChips.map(s => `<span class="stat-chip"><strong>${s.name}</strong> avg ${formatNum(s.avg)} · max ${formatNum(s.max)}</span>`).join('')}
+      </div><p class="loading-inline">⏳ Finding aha moments in ${rawRows.length} rows × ${headers.length} columns...</p>`;
+      showState('result');
 
-Analyse this data and respond ONLY in this format — brief bullet points, no prose paragraphs:
+      // Phase 2: domain-aware Gemini call
+      const fullPrompt = `You are analysing a ${domainInfo.label} spreadsheet (${domainInfo.key} domain).
 
-## 🔍 Hidden Insights
-- [specific pattern, anomaly, or fact from the data the user likely didn't notice — cite exact numbers/values]
-- [outlier or extreme value — which row/category and what makes it stand out]
-- [category or group breakdown — e.g. "X accounts for 40% of total Y"]
-- [trend or gap — missing dates, unusual spike, declining pattern]
-- [duplicate, inconsistency, or data quality issue if any]
-- [one more non-obvious insight specific to this data]
+Pre-computed stats — use these as grounding, do not just repeat them:
+${statsContext}
 
-## 📊 Formula Recommendations
-- **[FORMULA](\`=exact_formula_here\`)** — [one line: what it does with actual column names from this data]
-- **[FORMULA](\`=exact_formula_here\`)** — [one line]
-- **[FORMULA](\`=exact_formula_here\`)** — [one line]
-- **[FORMULA](\`=exact_formula_here\`)** — [one line]
+Data (${rawRows.length} rows, ${headers.length} columns):
+${userInput.slice(0, 11000)}
 
-Rules:
-- Every insight must reference specific values, names, or numbers from the data — no generic observations
-- Formulas must use actual column names/letters from the pasted data
-- Keep each bullet to one line
-- Works for Excel, Google Sheets, LibreOffice — use universally supported functions`;
+Respond ONLY in this exact structure — no extra headers, no deviations:
+
+## The Story
+[Exactly 2 sentences. Plain English. What is this dataset and what is the single most important thing it reveals? Name specific values.]
+
+## Top 3 Aha Moments
+1. [Most surprising finding — cite exact number, name, or value from the data]
+2. [Second most surprising — specific, not generic]
+3. [Third — specific]
+
+## Hidden Patterns
+- [Outlier or anomaly with exact value — which row/entry and why it stands out]
+- [Category or group breakdown with percentages where calculable]
+- [Trend, gap, or sequence issue — missing dates, plateau, spike, reversal]
+- [Data quality issue if any: duplicates, blanks, inconsistent formatting]
+
+## Smart Formulas
+- **FORMULA_NAME** (\`=exact_formula_using_real_columns\`) — one line: what it calculates
+- **FORMULA_NAME** (\`=exact_formula\`) — one line
+- **FORMULA_NAME** (\`=exact_formula\`) — one line
+
+Rules: every insight must reference specific values from THIS data. Formulas must use real column letters/names. No generic statements.`;
 
       chrome.runtime.sendMessage(
         {
           action: 'callGeminiBackground',
           prompt: fullPrompt,
           options: {
-            systemInstruction: 'You are a sharp data analyst. Spot non-obvious patterns in spreadsheet data. Be specific — cite actual values, names, and numbers from the data. Never give generic advice. Every bullet must reference something concrete from the pasted dataset.',
-            temperature: 0.4,
+            systemInstruction: `You are a sharp ${domainInfo.key} data analyst. Spot non-obvious patterns. Be specific — cite actual values, names, and numbers from the data. Never give generic advice. Follow the exact output structure requested.`,
+            temperature: 0.35,
           },
         },
         (response) => {
-          if (response?.success) showResult(response.data, false);
-          else showError(response?.error || 'Analysis failed. Try again.');
+          if (response?.success) {
+            resultContent.innerHTML = buildInsightHTML(response.data, domainInfo, statChips);
+            showState('result');
+            chrome.storage.session.set({ cached_result: response.data, cached_at: Date.now(), cached_domain: JSON.stringify(domainInfo), cached_stats: JSON.stringify(statChips) });
+          } else {
+            showError(response?.error || 'Analysis failed. Try again.');
+          }
         }
       );
     } catch (err) {
